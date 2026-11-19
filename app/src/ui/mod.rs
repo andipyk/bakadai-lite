@@ -131,6 +131,18 @@ struct ScanUi {
     /// Bingkai ke thread dekoder (kapasitas 1: bingkai dilewati selama dekoder masih sibuk).
     tx: SyncSender<(Vec<u8>, u32, u32)>,
     rx: Receiver<String>,
+    /// Hasil baca terakhir: kode baru diterima setelah terbaca sama dua kali (menyaring salah baca).
+    last: Option<String>,
+    torch: bool,
+}
+
+/// Langkah izin kamera sebelum scanner dibuka (alur yang disarankan Android: jelaskan, lalu dialog resmi).
+#[derive(Clone, Copy, PartialEq)]
+enum ScanPerm {
+    Explain,
+    /// Menunggu jawaban dialog Android. `left`: jendela aplikasi sempat tertutup dialog itu.
+    Waiting { since: f64, left: bool },
+    Denied,
 }
 
 pub struct BakadaiApp {
@@ -159,6 +171,7 @@ pub struct BakadaiApp {
     insets_for: Option<Vec2>,
     /// Layar scan kamera yang sedang terbuka.
     scan: Option<ScanUi>,
+    scan_perm: Option<ScanPerm>,
     /// Kode hasil scan kamera, diambil layar yang membuka scanner lewat [`BakadaiApp::take_scan`].
     scanned: Option<String>,
     /// Permintaan buka scanner dari layar yang sedang meminjam state-nya (dibuka di awal bingkai berikutnya).
@@ -246,6 +259,7 @@ impl BakadaiApp {
             insets_for: None,
             exit_at: -10.0,
             scan: None,
+            scan_perm: None,
             scanned: None,
             want_scan: false,
         };
@@ -273,6 +287,13 @@ impl BakadaiApp {
 
     /// Buka kamera untuk scan barcode; hasilnya diambil layar yang sama lewat [`Self::take_scan`].
     pub fn open_scanner(&mut self) {
+        match crate::scan::permission() {
+            crate::scan::Permission::Granted => self.start_camera(),
+            _ => self.scan_perm = Some(ScanPerm::Explain),
+        }
+    }
+
+    fn start_camera(&mut self) {
         match crate::scan::Camera::open() {
             Ok(cam) => {
                 let (tx, frames) = std::sync::mpsc::sync_channel::<(Vec<u8>, u32, u32)>(1);
@@ -287,7 +308,7 @@ impl BakadaiApp {
                         }
                     }
                 });
-                self.scan = Some(ScanUi { cam, tex: None, tx, rx });
+                self.scan = Some(ScanUi { cam, tex: None, tx, rx, last: None, torch: false });
             }
             Err(e) => self.err(e),
         }
@@ -300,6 +321,10 @@ impl BakadaiApp {
         if std::mem::take(&mut self.want_scan) {
             self.open_scanner();
         }
+        if let Some(step) = self.scan_perm {
+            self.scan_perm_ui(ctx, step);
+            return;
+        }
         let Some(s) = &mut self.scan else { return };
         ctx.request_repaint();
         if let Some(f) = s.cam.frame() {
@@ -310,8 +335,17 @@ impl BakadaiApp {
             }
             let _ = s.tx.try_send((f.luma, f.w as u32, f.h as u32));
         }
-        let found = s.rx.try_recv().ok();
+        // Kode diterima bila dua bacaan berturut-turut sama.
+        let mut found = None;
+        while let Ok(code) = s.rx.try_recv() {
+            if s.last.as_deref() == Some(code.as_str()) {
+                found = Some(code);
+                break;
+            }
+            s.last = Some(code);
+        }
         let mut close = false;
+        let mut torch = None;
         egui::Modal::new(egui::Id::unique("scan")).show(ctx, |ui| {
             ui.set_width(300.0);
             ui.label(RichText::new("Scan barcode").family(medium()).size(17.0));
@@ -327,10 +361,24 @@ impl BakadaiApp {
                 }
             }
             ui.add_space(8.0);
-            if secondary_button(ui, "Batal").clicked() {
+            if s.cam.has_torch() {
+                ui.columns(2, |c| {
+                    let label = if s.torch { "Matikan lampu" } else { "Nyalakan lampu" };
+                    if secondary_button(&mut c[0], label).clicked() {
+                        torch = Some(!s.torch);
+                    }
+                    if secondary_button(&mut c[1], "Batal").clicked() {
+                        close = true;
+                    }
+                });
+            } else if secondary_button(ui, "Batal").clicked() {
                 close = true;
             }
         });
+        if let Some(on) = torch {
+            s.cam.set_torch(on);
+            s.torch = on;
+        }
         if let Some(code) = found {
             self.scanned = Some(code);
             close = true;
@@ -339,6 +387,81 @@ impl BakadaiApp {
             self.scan = None; // menutup kamera; thread dekoder ikut berhenti
             ctx.request_repaint();
         }
+    }
+
+    fn scan_perm_ui(&mut self, ctx: &egui::Context, step: ScanPerm) {
+        let now = ctx.input(|i| i.time);
+        let mut next = Some(step);
+        match step {
+            ScanPerm::Waiting { since, left } => {
+                ctx.request_repaint_after(std::time::Duration::from_millis(250));
+                let focused = ctx.input(|i| i.focused);
+                if crate::scan::permission() == crate::scan::Permission::Granted {
+                    next = None;
+                    self.start_camera();
+                } else if !focused {
+                    next = Some(ScanPerm::Waiting { since, left: true });
+                } else if left || now - since > 2.5 {
+                    // Dialog sudah ditutup tanpa izin, atau Android tidak menampilkannya lagi (ditolak permanen).
+                    next = Some(ScanPerm::Denied);
+                }
+            }
+            _ => {}
+        }
+        let mut action = 0; // 1 = lanjut ke dialog Android, 2 = tutup, 3 = buka Pengaturan
+        egui::Modal::new(egui::Id::unique("scan_perm")).show(ctx, |ui| {
+            ui.set_width(300.0);
+            let (title, body) = match step {
+                ScanPerm::Explain => (
+                    "Izinkan kamera?",
+                    "Kamera hanya dipakai untuk scan barcode barang. Gambar dibaca di HP ini, tidak disimpan atau dikirim. Setelah ini Android akan bertanya; pilih Izinkan.",
+                ),
+                ScanPerm::Waiting { .. } => ("Izin kamera", "Pilih Izinkan pada jendela Android."),
+                ScanPerm::Denied => (
+                    "Kamera belum diizinkan",
+                    "Scan pakai kamera tidak bisa dipakai. Anda tetap bisa mengetik kode barang atau memakai scanner USB/Bluetooth. Izin kamera bisa diberikan kapan saja di Pengaturan aplikasi.",
+                ),
+            };
+            ui.label(RichText::new(title).family(medium()).size(17.0));
+            ui.label(body);
+            ui.add_space(8.0);
+            ui.columns(2, |c| match step {
+                ScanPerm::Explain => {
+                    if secondary_button(&mut c[0], "Nanti").clicked() {
+                        action = 2;
+                    }
+                    if primary_button(&mut c[1], "Lanjut").clicked() {
+                        action = 1;
+                    }
+                }
+                ScanPerm::Waiting { .. } => {
+                    if secondary_button(&mut c[0], "Batal").clicked() {
+                        action = 2;
+                    }
+                }
+                ScanPerm::Denied => {
+                    if secondary_button(&mut c[0], "Tutup").clicked() {
+                        action = 2;
+                    }
+                    if secondary_button(&mut c[1], "Buka Pengaturan").clicked() {
+                        action = 3;
+                    }
+                }
+            });
+        });
+        match action {
+            1 => {
+                crate::scan::request_permission();
+                next = Some(ScanPerm::Waiting { since: now, left: false });
+            }
+            2 => next = None,
+            3 => {
+                crate::scan::open_app_settings();
+                next = None;
+            }
+            _ => {}
+        }
+        self.scan_perm = next;
     }
 
     pub fn ok(&mut self, msg: impl Into<String>) {
@@ -682,8 +805,9 @@ impl eframe::App for BakadaiApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::BrowserBack)) && self.confirm.is_none() {
             let now = ctx.input(|i| i.time);
-            if self.scan.is_some() {
+            if self.scan.is_some() || self.scan_perm.is_some() {
                 self.scan = None;
+                self.scan_perm = None;
             } else if self.nav.len() > 1 {
                 self.back();
             } else if now - self.exit_at < 2.0 {

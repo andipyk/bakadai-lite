@@ -11,8 +11,14 @@ pub struct Frame {
     pub luma: Vec<u8>,
 }
 
-/// Baca barcode di gambar abu-abu. Format barang ritel (EAN/UPC/Code 128/39/93, ITF, Codabar) + QR.
+/// Baca barcode di gambar abu-abu. Format barang ritel (EAN/UPC/Code 128/39) + QR. ITF dan Codabar sengaja
+/// tidak dipakai: keduanya sering "membaca" kode palsu dari pola acak di depan kamera.
 pub fn decode(luma: &[u8], w: u32, h: u32) -> Option<String> {
+    // Dekoder tidak boleh membuat aplikasi tertutup bila gagal di gambar yang aneh.
+    std::panic::catch_unwind(|| decode_inner(luma, w, h)).ok().flatten()
+}
+
+fn decode_inner(luma: &[u8], w: u32, h: u32) -> Option<String> {
     let formats: HashSet<BarcodeFormat> = [
         BarcodeFormat::EAN_13,
         BarcodeFormat::EAN_8,
@@ -20,9 +26,6 @@ pub fn decode(luma: &[u8], w: u32, h: u32) -> Option<String> {
         BarcodeFormat::UPC_E,
         BarcodeFormat::CODE_128,
         BarcodeFormat::CODE_39,
-        BarcodeFormat::CODE_93,
-        BarcodeFormat::ITF,
-        BarcodeFormat::CODABAR,
         BarcodeFormat::QR_CODE,
     ]
     .into_iter()
@@ -52,6 +55,15 @@ pub fn rotate(src: &[u8], w: usize, h: usize, deg: i32) -> Frame {
     Frame { w: ow, h: oh, luma: out }
 }
 
+/// Izin kamera Android: `Granted`, boleh langsung ditanya (`Ask`), atau sudah ditolak sebelumnya (`Rationale`:
+/// Android menyarankan menjelaskan alasannya dulu sebelum dialog resmi muncul lagi).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Permission {
+    Granted,
+    Ask,
+    Rationale,
+}
+
 #[cfg(not(target_os = "android"))]
 pub struct Camera;
 
@@ -63,10 +75,22 @@ impl Camera {
     pub fn frame(&mut self) -> Option<Frame> {
         None
     }
+    pub fn has_torch(&self) -> bool {
+        false
+    }
+    pub fn set_torch(&mut self, _on: bool) {}
 }
+#[cfg(not(target_os = "android"))]
+pub fn permission() -> Permission {
+    Permission::Granted
+}
+#[cfg(not(target_os = "android"))]
+pub fn request_permission() {}
+#[cfg(not(target_os = "android"))]
+pub fn open_app_settings() {}
 
 #[cfg(target_os = "android")]
-pub use android::Camera;
+pub use android::{open_app_settings, permission, request_permission, Camera};
 
 #[cfg(target_os = "android")]
 mod android {
@@ -88,6 +112,10 @@ mod android {
     const TAG_AF_MODE: u32 = 65543;
     const LENS_FACING_BACK: u8 = 1;
     const AF_CONTINUOUS_PICTURE: u8 = 4;
+    const TAG_FLASH_MODE: u32 = 262146;
+    const TAG_FLASH_AVAILABLE: u32 = 327680;
+    const FLASH_TORCH: u8 = 2;
+    const FLASH_OFF: u8 = 0;
     const YUV_420_888: i32 = 35;
 
     unsafe extern "C" fn dev_cb(_: *mut c_void, _: *mut ffi::ACameraDevice) {}
@@ -107,28 +135,74 @@ mod android {
         _dev_cbs: Box<ffi::ACameraDevice_StateCallbacks>,
         _sess_cbs: Box<ffi::ACameraCaptureSession_stateCallbacks>,
         rotation: i32,
+        torch: bool,
         buf: Vec<u8>,
     }
 
-    /// Android 6+ butuh izin CAMERA saat dipakai; kalau belum ada, minta lalu suruh coba lagi.
-    fn camera_permission() -> Result<bool, String> {
+    fn with_activity<T>(f: impl FnOnce(&mut jni::Env, &JObject) -> jni::errors::Result<T>) -> Option<T> {
         let ctx = ndk_context::android_context();
         let vm = unsafe { JavaVM::from_raw(ctx.vm().cast()) };
         let raw = ctx.context() as jni::sys::jobject;
-        vm.attach_current_thread(|env| -> jni::errors::Result<bool> {
+        vm.attach_current_thread(|env| {
             let activity = unsafe { env.as_cast_raw::<JObject>(&raw)? };
+            let r = f(env, &activity);
+            if r.is_err() {
+                let _ = env.exception_clear();
+            }
+            r
+        })
+        .ok()
+    }
+
+    pub fn permission() -> super::Permission {
+        with_activity(|env, activity| {
             let perm = env.new_string("android.permission.CAMERA")?;
             let granted = env
-                .call_method(&*activity, jni_str!("checkSelfPermission"), jni_sig!("(Ljava/lang/String;)I"), &[JValue::Object(&perm)])?
+                .call_method(activity, jni_str!("checkSelfPermission"), jni_sig!("(Ljava/lang/String;)I"), &[JValue::Object(&perm)])?
                 .i()?;
             if granted == 0 {
-                return Ok(true);
+                return Ok(super::Permission::Granted);
             }
-            let arr = env.new_object_array(1, jni_str!("java/lang/String"), &perm)?;
-            env.call_method(&*activity, jni_str!("requestPermissions"), jni_sig!("([Ljava/lang/String;I)V"), &[JValue::Object(&arr), JValue::Int(8)])?;
-            Ok(false)
+            let rationale = env
+                .call_method(activity, jni_str!("shouldShowRequestPermissionRationale"), jni_sig!("(Ljava/lang/String;)Z"), &[JValue::Object(&perm)])?
+                .z()?;
+            Ok(if rationale { super::Permission::Rationale } else { super::Permission::Ask })
         })
-        .map_err(|e| format!("Gagal memeriksa izin kamera ({e})"))
+        .unwrap_or(super::Permission::Ask)
+    }
+
+    /// Munculkan dialog izin resmi Android (tidak bisa diubah isinya oleh aplikasi).
+    pub fn request_permission() {
+        with_activity(|env, activity| {
+            let perm = env.new_string("android.permission.CAMERA")?;
+            let arr = env.new_object_array(1, jni_str!("java/lang/String"), &perm)?;
+            env.call_method(activity, jni_str!("requestPermissions"), jni_sig!("([Ljava/lang/String;I)V"), &[JValue::Object(&arr), JValue::Int(8)])?;
+            Ok(())
+        });
+    }
+
+    /// Halaman info aplikasi di Pengaturan Android (Izin → Kamera).
+    pub fn open_app_settings() {
+        with_activity(|env, activity| {
+            let action = env.new_string("android.settings.APPLICATION_DETAILS_SETTINGS")?;
+            let pkg = env.call_method(activity, jni_str!("getPackageName"), jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
+            let scheme = env.new_string("package")?;
+            let uri = env
+                .call_static_method(
+                    jni_str!("android/net/Uri"),
+                    jni_str!("fromParts"),
+                    jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;"),
+                    &[JValue::Object(&scheme), JValue::Object(&pkg), JValue::Object(&JObject::null())],
+                )?
+                .l()?;
+            let intent = env.new_object(
+                jni_str!("android/content/Intent"),
+                jni_sig!("(Ljava/lang/String;Landroid/net/Uri;)V"),
+                &[JValue::Object(&action), JValue::Object(&uri)],
+            )?;
+            env.call_method(activity, jni_str!("startActivity"), jni_sig!("(Landroid/content/Intent;)V"), &[JValue::Object(&intent)])?;
+            Ok(())
+        });
     }
 
     fn ok(status: ffi::camera_status_t, what: &str) -> Result<(), String> {
@@ -141,9 +215,6 @@ mod android {
 
     impl Camera {
         pub fn open() -> Result<Self, String> {
-            if !camera_permission()? {
-                return Err("Izinkan akses kamera, lalu ketuk tombol scan lagi.".into());
-            }
             unsafe {
                 let mut cam = Camera {
                     manager: ffi::ACameraManager_create(),
@@ -166,6 +237,7 @@ mod android {
                         onActive: Some(sess_cb),
                     }),
                     rotation: 90,
+                    torch: false,
                     buf: vec![0; (W * H) as usize],
                 };
                 // Drop menutup apa pun yang sudah terbuka bila langkah berikut gagal.
@@ -192,6 +264,9 @@ mod android {
                     if ffi::ACameraMetadata_getConstEntry(meta, TAG_SENSOR_ORIENTATION, &mut e).0 == 0 && e.count > 0 {
                         self.rotation = *e.data.i32_;
                     }
+                    self.torch = ffi::ACameraMetadata_getConstEntry(meta, TAG_FLASH_AVAILABLE, &mut e).0 == 0
+                        && e.count > 0
+                        && *e.data.u8_ == 1;
                     chosen = Some(CStr::from_ptr(id).to_owned());
                 }
                 ffi::ACameraMetadata_free(meta);
@@ -227,6 +302,24 @@ mod android {
             Ok(())
         }
 
+        /// HP punya lampu kilat yang bisa dinyalakan terus (mode senter).
+        pub fn has_torch(&self) -> bool {
+            self.torch
+        }
+
+        /// Senter untuk scan di tempat gelap: ubah FLASH_MODE lalu kirim ulang permintaan berulang.
+        pub fn set_torch(&mut self, on: bool) {
+            if !self.torch || self.session.is_null() {
+                return;
+            }
+            unsafe {
+                let mode = if on { FLASH_TORCH } else { FLASH_OFF };
+                let _ = ffi::ACaptureRequest_setEntry_u8(self.request, TAG_FLASH_MODE, 1, &mode);
+                let mut req = self.request;
+                let _ = ffi::ACameraCaptureSession_setRepeatingRequest(self.session, null_mut(), 1, &mut req, null_mut());
+            }
+        }
+
         /// Bingkai terbaru (sudah tegak), atau None bila belum ada bingkai baru.
         pub fn frame(&mut self) -> Option<Frame> {
             unsafe {
@@ -256,6 +349,8 @@ mod android {
         fn drop(&mut self) {
             unsafe {
                 if !self.session.is_null() {
+                    // Hentikan aliran gambar dulu sebelum sesi, kamera, dan pembaca gambar dilepas.
+                    let _ = ffi::ACameraCaptureSession_stopRepeating(self.session);
                     ffi::ACameraCaptureSession_close(self.session);
                 }
                 if !self.device.is_null() {

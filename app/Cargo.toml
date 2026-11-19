@@ -44,7 +44,8 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
-panic = "abort"
+# unwind (bukan abort): galat di dekoder barcode cukup diabaikan, aplikasi tidak tertutup paksa.
+panic = "unwind"
 
 # Dipakai oleh `cargo apk build --release` (lihat ANDROID.md)
 [package.metadata.android]
