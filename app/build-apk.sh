@@ -43,6 +43,26 @@ export CARGO_APK_RELEASE_KEYSTORE_PASSWORD
 
 cargo apk build --release --lib
 
+# Android 16 + targetSdk 36: tombol/gesture kembali tidak lagi dikirim sebagai KEYCODE_BACK (predictive back) dan
+# aplikasi langsung ditutup sistem. cargo-apk belum punya opsi manifest untuk ini, jadi manifest dikompilasi ulang
+# dengan android:enableOnBackInvokedCallback="false" (opt-out resmi, lihat behavior-changes-16) lalu APK ditandatangani ulang.
+APKDIR=target/release/apk
+BT0="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+PLAT="$ANDROID_HOME/platforms/$(ls "$ANDROID_HOME/platforms" | sort -V | tail -1)/android.jar"
+MW="$APKDIR/manifest-work"
+rm -rf "$MW" && mkdir -p "$MW"
+sed 's/<application /<application android:enableOnBackInvokedCallback="false" /' "$APKDIR/AndroidManifest.xml" > "$MW/AndroidManifest.xml"
+grep -q 'enableOnBackInvokedCallback="false"' "$MW/AndroidManifest.xml"
+"$BT0/aapt" package -f -M "$MW/AndroidManifest.xml" -S android/res -I "$PLAT" -F "$MW/manifest.apk"
+(cd "$MW" && unzip -q -o manifest.apk AndroidManifest.xml)
+cp "$APKDIR/BakadaiLite-unaligned.apk" "$MW/patched.apk"
+zip -q -d "$MW/patched.apk" AndroidManifest.xml 'META-INF/*' >/dev/null 2>&1 || true
+(cd "$MW" && zip -q patched.apk AndroidManifest.xml)
+rm -f "$APKDIR/BakadaiLite.apk" "$APKDIR/BakadaiLite.apk.idsig"
+"$BT0/zipalign" -p -f 4 "$MW/patched.apk" "$APKDIR/BakadaiLite.apk"
+"$BT0/apksigner" sign --ks "$KS" --ks-pass env:CARGO_APK_RELEASE_KEYSTORE_PASSWORD "$APKDIR/BakadaiLite.apk"
+rm -rf "$MW"
+
 # AAB untuk Play Store: ubah APK ke format proto, susun modul "base", lalu bundletool + tanda tangan upload key.
 OUT=target/release/apk
 BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"

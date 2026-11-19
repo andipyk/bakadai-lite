@@ -353,7 +353,7 @@ pub fn expense_edit(app: &mut BakadaiApp, ui: &mut Ui) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         let x = &mut app.more.expense;
         card(ui, |ui| {
-            field(ui, "Nominal", &mut app.more.expense_amount, "0");
+            num_field(ui, "Nominal", &mut app.more.expense_amount, "0");
             field(ui, "Tanggal (TTTT-BB-HH)", &mut app.more.expense_date, "");
             ui.label(RichText::new("Kategori Pengeluaran").size(13.0).color(MUTED));
             let sel = x.category_id.as_ref().and_then(|id| cats.iter().find(|c| &c.id == id)).map(|c| c.name.clone()).unwrap_or_else(|| "Tanpa Kategori".into());
@@ -606,7 +606,7 @@ pub fn settings_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 let _ = app.db.set_setting("auto_avg_cost", if avg { "1" } else { "0" });
             }
             muted(ui, "Saat aktif, harga modal dihitung ulang sebagai rata-rata tertimbang setiap kali stok masuk.");
-            field(ui, "Kunci transaksi lebih lama dari (hari, 0 = tidak dikunci)", &mut m.s_lock, "0");
+            num_field(ui, "Kunci transaksi lebih lama dari (hari, 0 = tidak dikunci)", &mut m.s_lock, "0");
         });
         card(ui, |ui| {
             ui.label(RichText::new("Struk & Printer").family(medium()));
@@ -753,7 +753,7 @@ pub fn fees_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 }
             });
             f.kind = k;
-            field(ui, if f.kind == "percent" { "Nilai (%)" } else { "Nominal" }, &mut app.more.fee_value, "0");
+            num_field(ui, if f.kind == "percent" { "Nilai (%)" } else { "Nominal" }, &mut app.more.fee_value, "0");
             toggle(ui, &mut app.more.fee.include_profit, "Termasuk profit");
             if primary_button(ui, if app.more.fee.id.is_empty() { "Tambah Biaya Tambahan" } else { "Ubah Biaya Tambahan" }).clicked() {
                 let mut f = app.more.fee.clone();

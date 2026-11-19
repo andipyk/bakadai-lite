@@ -162,6 +162,47 @@ pub fn field(ui: &mut Ui, label: &str, value: &mut String, hint: &str) -> egui::
     )
 }
 
+/// Kolom angka. Keyboard Android dari NativeActivity selalu huruf (jenis input tidak bisa diatur tanpa kode Java),
+/// jadi kolom angka memakai papan angka di dalam aplikasi (`BakadaiApp::numpad_ui`): ketukan kolom memilihnya,
+/// tombol papan angka mengubah isinya langsung (angka ditambah di akhir, ⌫ menghapus dari akhir).
+pub fn mark_numeric(ui: &Ui, resp: &egui::Response, value: &mut String) {
+    if !numpad_enabled() {
+        return;
+    }
+    let ctx = ui.ctx();
+    if resp.clicked() || resp.gained_focus() {
+        ctx.data_mut(|d| d.insert_temp(numpad_key("pick"), resp.id));
+    }
+    if ctx.data(|d| d.get_temp::<egui::Id>(numpad_key("active"))) != Some(resp.id) {
+        return;
+    }
+    ctx.data_mut(|d| d.insert_temp(numpad_key("seen"), true));
+    for op in ctx.data_mut(|d| d.remove_temp::<Vec<String>>(numpad_key("ops")).unwrap_or_default()) {
+        if op == "⌫" {
+            value.pop();
+        } else {
+            value.push_str(&op);
+        }
+    }
+    ui.painter().rect_stroke(resp.rect.expand(1.0), 14, Stroke::new(2.0, PRIMARY), StrokeKind::Outside);
+    if ctx.data(|d| d.get_temp::<bool>(numpad_key("scroll")).unwrap_or(false)) {
+        resp.scroll_to_me(Some(Align::Center)); // papan angka baru muncul: jaga kolom tetap terlihat
+    }
+}
+pub fn numpad_enabled() -> bool {
+    cfg!(target_os = "android") || std::env::var_os("BAKADAI_LITE_NUMPAD").is_some()
+}
+pub fn numpad_key(name: &str) -> egui::Id {
+    egui::Id::unique(("numpad", name))
+}
+
+/// Kolom isian angka (harga, stok, jumlah).
+pub fn num_field(ui: &mut Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
+    let r = field(ui, label, value, hint);
+    mark_numeric(ui, &r, value);
+    r
+}
+
 pub fn field_multiline(ui: &mut Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
     ui.label(RichText::new(label).size(14.0).color(MUTED));
     ui.add(

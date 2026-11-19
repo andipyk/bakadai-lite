@@ -388,9 +388,17 @@ pub fn edit_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 if icon_button(ui, Icon::Scan, TEXT, BG).on_hover_text("Scan barcode pakai kamera").clicked() {
                     app.want_scan = true;
                 }
-                if input_with_button(ui, &mut f.code, "", "Acak", db::MAX_CODE_LEN) {
+                if small_button(ui, "Acak").clicked() {
                     f.code = app.db.random_code();
                 }
+                // Kode barang biasanya angka barcode; tombol ABC di papan angka untuk kode berhuruf.
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut f.code)
+                        .char_limit(db::MAX_CODE_LEN)
+                        .desired_width(ui.available_width())
+                        .margin(egui::Margin::symmetric(16, 15)),
+                );
+                mark_numeric(ui, &r, &mut f.code);
             });
             ui.label(RichText::new("Kategori").size(13.0).color(MUTED));
             let sel_name = f
@@ -417,8 +425,8 @@ pub fn edit_screen(app: &mut BakadaiApp, ui: &mut Ui) {
         });
         card(ui, |ui| {
             ui.columns(2, |c| {
-                field(&mut c[0], "Harga Modal", &mut f.cost, "0");
-                field(&mut c[1], "Harga Jual", &mut f.sell, "0");
+                num_field(&mut c[0], "Harga Modal", &mut f.cost, "0");
+                num_field(&mut c[1], "Harga Jual", &mut f.sell, "0");
             });
             let cost = parse_money(&f.cost);
             let sell = parse_money(&f.sell);
@@ -427,11 +435,11 @@ pub fn edit_screen(app: &mut BakadaiApp, ui: &mut Ui) {
             }
             ui.columns(2, |c| {
                 if is_new {
-                    field(&mut c[0], "Stok Awal (Wajib)", &mut f.initial_stock, "0");
+                    num_field(&mut c[0], "Stok Awal (Wajib)", &mut f.initial_stock, "0");
                 } else {
                     c[0].label(RichText::new("Stok saat ini hanya dapat diubah melalui Stok Masuk, Keluar atau Audit.").size(11.5).color(MUTED));
                 }
-                field(&mut c[1], "Stok Minimal", &mut f.min_stock, "0");
+                num_field(&mut c[1], "Stok Minimal", &mut f.min_stock, "0");
             });
             ui.columns(2, |c| {
                 field(&mut c[0], "Satuan", &mut f.unit, "pcs");
@@ -455,8 +463,10 @@ pub fn edit_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     let w = (ui.available_width() - 50.0) / 3.0;
                     ui.add(egui::TextEdit::singleline(&mut t.1).hint_text("Nama Harga").desired_width(w));
-                    ui.add(egui::TextEdit::singleline(&mut t.2).hint_text("Min qty").desired_width(w * 0.7));
-                    ui.add(egui::TextEdit::singleline(&mut t.3).hint_text("Harga").desired_width(w * 1.2));
+                    let r = ui.add(egui::TextEdit::singleline(&mut t.2).hint_text("Min qty").desired_width(w * 0.7));
+                    mark_numeric(ui, &r, &mut t.2);
+                    let r = ui.add(egui::TextEdit::singleline(&mut t.3).hint_text("Harga").desired_width(w * 1.2));
+                    mark_numeric(ui, &r, &mut t.3);
                     if icon_button(ui, Icon::Close, RED, RED_SOFT).clicked() {
                         remove = Some(i);
                     }

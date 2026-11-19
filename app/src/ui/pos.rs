@@ -320,7 +320,8 @@ fn checkout(app: &mut BakadaiApp, ui: &mut Ui) {
                 let mut pct = app.pos.discount_pct;
                 segmented(ui, &mut pct, &[(false, "Rp"), (true, "%")]);
                 app.pos.discount_pct = pct;
-                ui.add(egui::TextEdit::singleline(&mut app.pos.discount).hint_text("0").desired_width(f32::INFINITY));
+                let r = ui.add(egui::TextEdit::singleline(&mut app.pos.discount).hint_text("0").desired_width(f32::INFINITY));
+                mark_numeric(ui, &r, &mut app.pos.discount);
             });
             if app.pos.discount_pct && disc_val > db::MAX_DISCOUNT_PCT {
                 ui.label(RichText::new("Maksimum diskon adalah 100% dari total harga").color(RED).size(12.0));
@@ -380,7 +381,8 @@ fn checkout(app: &mut BakadaiApp, ui: &mut Ui) {
                 }
             });
             ui.label(RichText::new("Uang Diterima").size(13.0).color(MUTED));
-            ui.add(egui::TextEdit::singleline(&mut app.pos.cash).hint_text(money_str(t.total)).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(10, 9)));
+            let r = ui.add(egui::TextEdit::singleline(&mut app.pos.cash).hint_text(money_str(t.total)).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(10, 9)));
+            mark_numeric(ui, &r, &mut app.pos.cash);
             ui.horizontal_wrapped(|ui| {
                 if small_button(ui, "Uang Pas").clicked() {
                     app.pos.cash = money_str(t.total);

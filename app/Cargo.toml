@@ -1,6 +1,6 @@
 [package]
 name = "bakadai_lite"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Aplikasi stok & kasir ringan, offline-first, untuk Android (dan pratinjau desktop)"
 

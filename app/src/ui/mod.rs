@@ -176,6 +176,14 @@ pub struct BakadaiApp {
     scanned: Option<String>,
     /// Permintaan buka scanner dari layar yang sedang meminjam state-nya (dibuka di awal bingkai berikutnya).
     pub want_scan: bool,
+    /// Kolom angka yang sedang diisi lewat papan angka aplikasi.
+    numpad: Option<egui::Id>,
+    /// Pengguna menekan ABC: pakai keyboard Android biasa untuk kolom ini.
+    numpad_abc: bool,
+    /// Tombol papan angka ditekan di bingkai ini (fokus kolom jangan dianggap pindah).
+    numpad_pressed: bool,
+    /// Ketukan papan angka, diterapkan kolom aktif pada bingkai berikutnya.
+    numpad_ops: Vec<String>,
     /// Waktu (detik egui) tombol kembali ditekan di layar terakhir; tekan lagi dalam 2 detik = keluar.
     exit_at: f64,
 }
@@ -262,6 +270,10 @@ impl BakadaiApp {
             scan_perm: None,
             scanned: None,
             want_scan: false,
+            numpad: None,
+            numpad_abc: false,
+            numpad_pressed: false,
+            numpad_ops: Vec::new(),
         };
         if start == Screen::ProductEdit {
             app.products.open_new(&app.db);
@@ -395,6 +407,100 @@ impl BakadaiApp {
         if close {
             self.scan = None; // menutup kamera; thread dekoder ikut berhenti
             ctx.request_repaint();
+        }
+    }
+
+    /// Papan angka di bawah layar (menggantikan navigasi bawah selama kolom angka aktif).
+    fn numpad_ui(&mut self, ui: &mut Ui) {
+        let mut pressed: Option<&str> = None;
+        let panel = egui::Panel::bottom("numpad")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(SURFACE).inner_margin(Margin { left: 8, right: 8, top: 8, bottom: (8.0 + self.insets.1).min(127.0) as i8 }))
+            .show(ui, |ui| {
+                let rows: [[&str; 4]; 4] = [["1", "2", "3", "⌫"], ["4", "5", "6", "ABC"], ["7", "8", "9", ","], ["000", "0", "Selesai", ""]];
+                let gap = 6.0;
+                let w = (ui.available_width() - 3.0 * gap) / 4.0;
+                ui.spacing_mut().item_spacing = Vec2::splat(gap);
+                for row in rows {
+                    ui.horizontal(|ui| {
+                        for k in row.into_iter().filter(|k| !k.is_empty()) {
+                            let wide = k == "Selesai";
+                            let size = Vec2::new(if wide { w * 2.0 + gap } else { w }, 50.0);
+                            let (fill, fg) = if wide { (PRIMARY, Color32::WHITE) } else { (CARD, TEXT) };
+                            let label = RichText::new(k).size(if k.chars().count() > 1 { 16.0 } else { 22.0 }).color(fg);
+                            if ui.add(egui::Button::new(label).fill(fill).corner_radius(14).min_size(size)).clicked() {
+                                pressed = Some(k);
+                            }
+                        }
+                    });
+                }
+            });
+        if panel.response.contains_pointer() {
+            self.numpad_pressed = true; // ketukan di papan angka bukan "di luar kolom"
+        }
+        let Some(k) = pressed else { return };
+        match k {
+            "Selesai" => self.close_numpad(ui.ctx()),
+            "ABC" => {
+                self.numpad_abc = true;
+                if let Some(id) = self.numpad {
+                    ui.ctx().memory_mut(|m| m.request_focus(id)); // keyboard Android muncul untuk kolom ini
+                }
+            }
+            op => self.numpad_ops.push(op.to_string()),
+        }
+        ui.ctx().request_repaint();
+    }
+
+    fn close_numpad(&mut self, ctx: &egui::Context) {
+        if let Some(id) = self.numpad.take() {
+            ctx.memory_mut(|m| m.surrender_focus(id));
+        }
+        self.numpad_abc = false;
+        self.numpad_ops.clear();
+    }
+
+    /// Sebelum layar digambar: beri tahu kolom mana yang aktif dan ketukan yang harus diterapkan.
+    fn numpad_before(&mut self, ctx: &egui::Context) {
+        let ops = std::mem::take(&mut self.numpad_ops);
+        ctx.data_mut(|d| {
+            match self.numpad {
+                Some(id) => {
+                    d.insert_temp(numpad_key("active"), id);
+                }
+                None => d.remove::<egui::Id>(numpad_key("active")),
+            }
+            d.insert_temp(numpad_key("ops"), ops);
+            d.remove::<bool>(numpad_key("seen"));
+            d.remove::<egui::Id>(numpad_key("pick"));
+        });
+    }
+
+    /// Setelah layar digambar: kolom angka baru dipilih, atau papan ditutup bila diketuk di luar / pindah layar.
+    fn numpad_after(&mut self, ctx: &egui::Context) {
+        let (pick, seen) = ctx.data_mut(|d| {
+            let pick = d.get_temp::<egui::Id>(numpad_key("pick"));
+            let seen = d.get_temp::<bool>(numpad_key("seen")).unwrap_or(false);
+            d.remove::<bool>(numpad_key("scroll"));
+            (pick, seen)
+        });
+        let was_open = self.numpad.is_some();
+        let tapped = ctx.input(|i| i.pointer.any_click());
+        if let Some(id) = pick {
+            if self.numpad != Some(id) {
+                self.numpad = Some(id);
+                self.numpad_abc = false;
+            }
+        } else if self.numpad.is_some() && (!seen || (tapped && !self.numpad_pressed)) {
+            self.close_numpad(ctx);
+        }
+        self.numpad_pressed = false;
+        if self.numpad.is_some() && !was_open {
+            ctx.data_mut(|d| d.insert_temp(numpad_key("scroll"), true));
+            ctx.request_repaint();
+        }
+        if self.numpad.is_some() && !self.numpad_abc {
+            ctx.output_mut(|o| o.ime = None); // jangan munculkan keyboard huruf Android
         }
     }
 
@@ -814,7 +920,9 @@ impl eframe::App for BakadaiApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::BrowserBack)) && self.confirm.is_none() {
             let now = ctx.input(|i| i.time);
-            if self.scan.is_some() || self.scan_perm.is_some() {
+            if self.numpad.is_some() {
+                self.close_numpad(&ctx);
+            } else if self.scan.is_some() || self.scan_perm.is_some() {
                 self.scan = None;
                 self.scan_perm = None;
             } else if self.nav.len() > 1 {
@@ -827,8 +935,13 @@ impl eframe::App for BakadaiApp {
                 self.ok("Tekan kembali sekali lagi untuk keluar");
             }
         }
+        self.numpad_before(&ctx);
         self.top_bar(ui);
-        self.bottom_bar(ui);
+        if self.numpad.is_some() && !self.numpad_abc {
+            self.numpad_ui(ui);
+        } else {
+            self.bottom_bar(ui);
+        }
         let screen = self.current();
         // Beranda menggambar pita periwinkle selebar layar, jadi panelnya tanpa margin.
         let pad = if screen == Screen::Home { Margin::ZERO } else { Margin { left: 16, right: 16, top: 8, bottom: 0 } };
@@ -859,6 +972,7 @@ impl eframe::App for BakadaiApp {
                 Screen::Fees => more::fees_screen(self, ui),
                 Screen::Sync => more::sync_screen(self, ui),
             });
+        self.numpad_after(&ctx);
         self.scan_ui(&ctx);
         self.confirm_ui(&ctx);
         self.toast_ui(&ctx);

@@ -183,9 +183,9 @@ pub fn form_screen(app: &mut BakadaiApp, ui: &mut Ui, kind: TxKind) {
                         TxKind::Out => "Jumlah Stok Keluar",
                         _ => "Jumlah Stok Akhir",
                     };
-                    field(&mut c[0], ql, qty, "0");
+                    num_field(&mut c[0], ql, qty, "0");
                     if kind != TxKind::Audit {
-                        field(&mut c[1], if kind == TxKind::In { "Harga Modal" } else { "Harga Jual" }, price, "0");
+                        num_field(&mut c[1], if kind == TxKind::In { "Harga Modal" } else { "Harga Jual" }, price, "0");
                     }
                 });
                 line.qty = parse_qty(qty);
@@ -222,7 +222,7 @@ pub fn form_screen(app: &mut BakadaiApp, ui: &mut Ui, kind: TxKind) {
                 kv(ui, "Total Harga", &money(total));
                 toggle(ui, &mut app.stock.paid_full, "Bayar Penuh");
                 if !app.stock.paid_full {
-                    field(ui, "Jumlah Dibayar (sisanya jadi piutang/hutang)", &mut app.stock.paid, "0");
+                    num_field(ui, "Jumlah Dibayar (sisanya jadi piutang/hutang)", &mut app.stock.paid, "0");
                 }
                 let methods = app.db.payment_methods();
                 if app.stock.method_id.is_none() {
@@ -503,7 +503,8 @@ pub fn detail_screen(app: &mut BakadaiApp, ui: &mut Ui, id: &str) {
             card(ui, |ui| {
                 ui.label(RichText::new("Tambah Pembayaran").family(medium()));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut app.stock.pay_amount).hint_text(money_str(d.total - d.paid)).desired_width(140.0));
+                    let r = ui.add(egui::TextEdit::singleline(&mut app.stock.pay_amount).hint_text(money_str(d.total - d.paid)).desired_width(140.0));
+                    mark_numeric(ui, &r, &mut app.stock.pay_amount);
                     let methods = app.db.payment_methods();
                     if app.stock.pay_method.is_none() {
                         app.stock.pay_method = methods.first().map(|m| m.id.clone());
@@ -600,8 +601,8 @@ pub fn return_screen(app: &mut BakadaiApp, ui: &mut Ui, id: &str) {
                 ui.label(RichText::new(&l.1).family(medium()));
                 muted(ui, format!("Sisa retur {}", db::fmt_qty(l.2)));
                 ui.columns(2, |c| {
-                    field(&mut c[0], "Jumlah Retur", &mut l.3, "0");
-                    field(&mut c[1], "Jumlah Rusak", &mut l.4, "0");
+                    num_field(&mut c[0], "Jumlah Retur", &mut l.3, "0");
+                    num_field(&mut c[1], "Jumlah Rusak", &mut l.4, "0");
                 });
                 suggested += parse_qty(&l.3) * l.5;
             });

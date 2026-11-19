@@ -19,7 +19,7 @@ Staff, barang, riwayat, dan biaya tambahan **tanpa batas**.
 
 | | App Lain | Bakadai Lite |
 |---|---|---|
-| Ukuran APK | ±23 MB (APK dasar, belum termasuk split) | **4 MB** |
+| Ukuran APK | ±23 MB (APK dasar, belum termasuk split) | **±4,5 MB** |
 | Izin HP | 47 | **3** (internet untuk sinkron, Bluetooth untuk printer struk, kamera untuk scan barcode) |
 | Butuh internet | Ya (Firebase) | Tidak (offline-first) |
 | Batas staff / barang / riwayat | 3–100 staff, 500–2.000 barang, 180–360 hari | **Tanpa batas** |
@@ -69,7 +69,9 @@ Staff, barang, riwayat, dan biaya tambahan **tanpa batas**.
 - **Tambah staff**: Lainnya → Staff → *Tambah Staff* → pilih peran → centang akses. Ganti staff yang sedang memakai HP di menu Lainnya (bagian atas).
 - **Laporan**: Lainnya → Laporan → pilih periode → lihat omset, laba, terlaris; tombol *Unduh* membuat file CSV yang bisa dibuka di Excel.
 - **Cetak struk**: Pengaturan → pilih printer Bluetooth yang sudah di-pair di HP, atau isi alamat printer jaringan (contoh `192.168.1.50:9100`), ukuran kertas 58/80 mm → di detail transaksi tekan *Cetak*. Pencetakan jalan di latar, layar tidak macet. Bisa juga *Auto-print* setelah bayar dan buka laci kasir otomatis.
-- **Scan barcode pakai kamera**: ketuk ikon scan di sebelah kolom cari (Kasir, Stok Masuk/Keluar/Audit, Barang) atau di kolom Kode Barang saat menambah barang. Di menu Barang, barcode yang belum terdaftar langsung membuka *Barang baru* dengan kode terisi.
+- **Scan barcode pakai kamera**: ketuk ikon scan di sebelah kolom cari (Kasir, Stok Masuk/Keluar/Audit, Barang) atau di kolom Kode Barang saat menambah barang. Masukkan seluruh barcode ke kotak bidik (jarak ±15 cm); tombol *Nyalakan lampu* untuk tempat gelap. Di menu Barang, barcode yang belum terdaftar langsung membuka *Barang baru* dengan kode terisi. Format: EAN-13 (barcode kemasan Indonesia), UPC-A, Code 128, Code 39, QR.
+- **Izin kamera**: saat pertama scan, aplikasi menjelaskan gunanya lalu Android menanyakan izin. Bila ditolak, kode tetap bisa diketik; izin bisa diberikan nanti lewat tombol *Buka Pengaturan*.
+- **Isi angka**: kolom harga, stok, jumlah, dan kode barang memakai papan angka di aplikasi (0–9, 000, koma, hapus). Tombol *ABC* untuk kode berhuruf, *Selesai* untuk menutup.
 - **Scanner barcode USB/Bluetooth** (mode keyboard) juga bisa dipakai di kolom cari Kasir/Stok: scan, lalu barang masuk keranjang.
 
 ### Hubungkan ke server Anda (opsional)
