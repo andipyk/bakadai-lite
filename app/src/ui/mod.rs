@@ -184,8 +184,8 @@ pub struct BakadaiApp {
     numpad_pressed: bool,
     /// Ketukan papan angka, diterapkan kolom aktif pada bingkai berikutnya.
     numpad_ops: Vec<String>,
-    /// Waktu (detik egui) tombol kembali ditekan di layar terakhir; tekan lagi dalam 2 detik = keluar.
-    exit_at: f64,
+    /// Saat tombol kembali ditekan di layar terakhir; tekan lagi dalam 2 detik = keluar. Jam sistem, bukan jam egui.
+    exit_at: Option<std::time::Instant>,
 }
 
 #[derive(Clone, Debug)]
@@ -265,7 +265,7 @@ impl BakadaiApp {
             more: Default::default(),
             insets: (0.0, 0.0),
             insets_for: None,
-            exit_at: -10.0,
+            exit_at: None,
             scan: None,
             scan_perm: None,
             scanned: None,
@@ -919,7 +919,6 @@ impl eframe::App for BakadaiApp {
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::BrowserBack)) && self.confirm.is_none() {
-            let now = ctx.input(|i| i.time);
             if self.numpad.is_some() {
                 self.close_numpad(&ctx);
             } else if self.scan.is_some() || self.scan_perm.is_some() {
@@ -927,11 +926,11 @@ impl eframe::App for BakadaiApp {
                 self.scan_perm = None;
             } else if self.nav.len() > 1 {
                 self.back();
-            } else if now - self.exit_at < 2.0 {
-                self.exit_at = -10.0;
+            } else if self.exit_at.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+                self.exit_at = None;
                 crate::leave_app(&ctx);
             } else {
-                self.exit_at = now;
+                self.exit_at = Some(std::time::Instant::now());
                 self.ok("Tekan kembali sekali lagi untuk keluar");
             }
         }

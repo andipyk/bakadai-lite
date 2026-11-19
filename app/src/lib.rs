@@ -196,9 +196,25 @@ mod android_ui {
         env.call_method(&res, jni_str!("getDimensionPixelSize"), jni_sig!("(I)I"), &[JValue::Int(id)])?.i()
     }
 
+    /// Pindahkan aplikasi ke belakang. Bila Android menolak (`false`) atau gagal, buka layar utama HP
+    /// (sama seperti tombol Home). Tidak memakai `finish()`: membuat ulang activity di proses yang sama
+    /// membuat winit gagal (event loop hanya boleh dibuat sekali).
     pub fn move_task_to_back() {
+        let moved = with_activity(|env, activity| {
+            env.call_method(activity, jni_str!("moveTaskToBack"), jni_sig!("(Z)Z"), &[JValue::Bool(true)])?.z()
+        })
+        .unwrap_or(false);
+        if moved {
+            return;
+        }
         with_activity(|env, activity| {
-            env.call_method(activity, jni_str!("moveTaskToBack"), jni_sig!("(Z)Z"), &[JValue::Bool(true)])?;
+            let action = env.new_string("android.intent.action.MAIN")?;
+            let intent = env.new_object(jni_str!("android/content/Intent"), jni_sig!("(Ljava/lang/String;)V"), &[JValue::Object(&action)])?;
+            let home = env.new_string("android.intent.category.HOME")?;
+            env.call_method(&intent, jni_str!("addCategory"), jni_sig!("(Ljava/lang/String;)Landroid/content/Intent;"), &[JValue::Object(&home)])?;
+            // FLAG_ACTIVITY_NEW_TASK
+            env.call_method(&intent, jni_str!("addFlags"), jni_sig!("(I)Landroid/content/Intent;"), &[JValue::Int(0x1000_0000)])?;
+            env.call_method(activity, jni_str!("startActivity"), jni_sig!("(Landroid/content/Intent;)V"), &[JValue::Object(&intent)])?;
             Ok(())
         });
     }
