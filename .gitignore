@@ -1,0 +1,39 @@
+# --- Rust build output ---
+target/
+**/*.rs.bk
+
+# --- Local toolchain (cargo/rustup, ~860 MB) & signing key ---
+app/.tools/
+*.keystore
+*.jks
+keystore.properties
+
+# --- Build artifacts ---
+*.apk
+*.aab
+*.ap_
+*.idsig
+
+# --- Craft / agent workspace (logs, capture, checks) ---
+agent-session.jsonl
+build-activity.log
+feed.json
+usage.json
+capture/
+checks/
+inbox/
+investigation.cany/
+
+# --- Env & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.iml
+local.properties

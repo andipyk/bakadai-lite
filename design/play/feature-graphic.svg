@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+<rect width="1024" height="500" fill="#B4C6FF"/>
+<rect x="80" y="130" width="240" height="240" rx="64" fill="#24326B"/>
+<g transform="translate(140,190) scale(2.142857142857143)"><path fill="#B4C6FF" fill-rule="evenodd" d="M8,2 H34 C42.2,2 49,7.8 49,15.5 C49,19.6 47.3,23.1 44.2,25.7 C49.6,28.4 52.9,33.7 52.9,39.3 C52.9,47.9 46.8,54 38.5,54 H31.5 V42.1 Q31.5,38 27.4,38 H23 Q18.9,38 18.9,42.1 V54 H8 Q3.1,54 3.1,49.1 V6.9 Q3.1,2 8,2 Z M15.1,18.3 H36.7 Q38.2,18.3 39,19.7 L42.4,25.5 Q43,26.4 42.7,27.6 C42,29.9 39.9,31.4 37.4,31.4 C34.7,31.4 32.5,29.7 31.7,27.1 C30.9,29.7 28.6,31.4 25.9,31.4 C23.2,31.4 21,29.7 20.2,27.1 C19.3,29.7 17.1,31.4 14.5,31.4 C12,31.4 9.9,29.9 9.2,27.6 Q8.8,26.4 9.5,25.5 L12.9,19.7 Q13.7,18.3 15.1,18.3 Z"/></g>
+<text x="372" y="232" font-family="Outfit" font-weight="500" font-size="76" fill="#111111" letter-spacing="-1.5">Bakadai Lite</text>
+<text x="376" y="292" font-family="Outfit" font-size="32" fill="#24326B">Kasir &amp; stok ringan, jalan tanpa internet</text>
+</svg>
