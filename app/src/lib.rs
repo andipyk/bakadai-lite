@@ -5,6 +5,7 @@ pub mod bt;
 pub mod db;
 pub mod escpos;
 pub mod imgproc;
+pub mod scan;
 pub mod sync;
 pub mod ui;
 

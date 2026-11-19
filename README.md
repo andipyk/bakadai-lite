@@ -19,8 +19,8 @@ Staff, barang, riwayat, dan biaya tambahan **tanpa batas**.
 
 | | App Lain | Bakadai Lite |
 |---|---|---|
-| Ukuran APK | ±23 MB (APK dasar, belum termasuk split) | **3,7 MB** |
-| Izin HP | 47 | **2** (internet untuk sinkron, Bluetooth untuk printer struk) |
+| Ukuran APK | ±23 MB (APK dasar, belum termasuk split) | **4 MB** |
+| Izin HP | 47 | **3** (internet untuk sinkron, Bluetooth untuk printer struk, kamera untuk scan barcode) |
 | Butuh internet | Ya (Firebase) | Tidak (offline-first) |
 | Batas staff / barang / riwayat | 3–100 staff, 500–2.000 barang, 180–360 hari | **Tanpa batas** |
 | Foto produk | Diunggah apa adanya, data lokasi ikut tersimpan | Dikompres di HP, data lokasi dibuang |
@@ -69,7 +69,8 @@ Staff, barang, riwayat, dan biaya tambahan **tanpa batas**.
 - **Tambah staff**: Lainnya → Staff → *Tambah Staff* → pilih peran → centang akses. Ganti staff yang sedang memakai HP di menu Lainnya (bagian atas).
 - **Laporan**: Lainnya → Laporan → pilih periode → lihat omset, laba, terlaris; tombol *Unduh* membuat file CSV yang bisa dibuka di Excel.
 - **Cetak struk**: Pengaturan → pilih printer Bluetooth yang sudah di-pair di HP, atau isi alamat printer jaringan (contoh `192.168.1.50:9100`), ukuran kertas 58/80 mm → di detail transaksi tekan *Cetak*. Pencetakan jalan di latar, layar tidak macet. Bisa juga *Auto-print* setelah bayar dan buka laci kasir otomatis.
-- **Scanner barcode**: scanner USB/Bluetooth (mode keyboard) langsung bisa dipakai di kolom cari Kasir/Stok — scan lalu barang masuk keranjang.
+- **Scan barcode pakai kamera**: ketuk ikon scan di sebelah kolom cari (Kasir, Stok Masuk/Keluar/Audit, Barang) atau di kolom Kode Barang saat menambah barang. Di menu Barang, barcode yang belum terdaftar langsung membuka *Barang baru* dengan kode terisi.
+- **Scanner barcode USB/Bluetooth** (mode keyboard) juga bisa dipakai di kolom cari Kasir/Stok: scan, lalu barang masuk keranjang.
 
 ### Hubungkan ke server Anda (opsional)
 Lainnya → **Server & Sinkron** → isi alamat server (contoh `https://api.tokosaya.com`) → *Tes Koneksi* → isi email & kata sandi → *Masuk* → *Sinkron Sekarang*.

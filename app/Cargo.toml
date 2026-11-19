@@ -22,6 +22,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+rxing = { version = "0.9", default-features = false, features = ["decoders", "oned", "qrcode", "no_character_set_support"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "android-native-activity"] }
@@ -29,6 +30,8 @@ winit = { version = "0.30", default-features = false, features = ["android-nativ
 # Sudah ikut terpasang lewat android-activity; dipakai untuk menyembunyikan navigation bar Android (lib.rs).
 jni = "0.22"
 ndk-context = "0.1"
+# Kamera NDK (Camera2 + AImageReader) untuk scan barcode; sudah ikut terpasang lewat android-activity.
+ndk-sys = { version = "0.6", features = ["media"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 winit = { version = "0.30", default-features = false }
@@ -70,3 +73,11 @@ max_sdk_version = 30
 
 [[package.metadata.android.uses_permission]]
 name = "android.permission.BLUETOOTH_CONNECT"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.CAMERA"
+
+# Kamera tidak wajib: HP/tablet tanpa kamera tetap bisa memasang aplikasi (scan pakai scanner USB).
+[[package.metadata.android.uses_feature]]
+name = "android.hardware.camera"
+required = false

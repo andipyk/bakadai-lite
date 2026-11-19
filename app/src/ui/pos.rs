@@ -135,22 +135,35 @@ pub fn pos_screen(app: &mut BakadaiApp, ui: &mut Ui) {
 }
 
 fn catalog(app: &mut BakadaiApp, ui: &mut Ui) {
-    let resp = ui.add(
-        egui::TextEdit::singleline(&mut app.pos.search)
-            .hint_text("Cari barang / scan barcode lalu Enter")
-            .desired_width(f32::INFINITY)
-            .margin(egui::Margin::symmetric(10, 9)),
-    );
-    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-        let code = app.pos.search.trim().to_string();
+    let mut open_scan = false;
+    let resp = ui
+        .allocate_ui_with_layout(Vec2::new(ui.available_width(), 44.0), Layout::right_to_left(Align::Center), |ui| {
+            open_scan = icon_button(ui, Icon::Scan, TEXT, CARD).on_hover_text("Scan barcode pakai kamera").clicked();
+            ui.add(
+                egui::TextEdit::singleline(&mut app.pos.search)
+                    .hint_text("Cari barang / scan barcode")
+                    .desired_width(ui.available_width())
+                    .margin(egui::Margin::symmetric(10, 9)),
+            )
+        })
+        .inner;
+    if open_scan {
+        app.open_scanner();
+    }
+    let typed = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let scanned = app.take_scan();
+    if typed || scanned.is_some() {
+        let code = scanned.unwrap_or_else(|| app.pos.search.trim().to_string());
         if let Some(p) = app.db.product_by_code(&code) {
             app.pos.add_product(&p, 1.0);
             app.pos.search.clear();
             app.ok(format!("{} ditambahkan", p.name));
         } else if !code.is_empty() {
-            app.err("Kode Barang tidak tersedia");
+            app.err(format!("Kode Barang tidak tersedia: {code}"));
         }
-        resp.request_focus();
+        if typed {
+            resp.request_focus(); // scanner USB: siap untuk scan berikutnya
+        }
     }
     let cats = app.db.categories("product");
     egui::ScrollArea::horizontal().id_salt("poscats").show(ui, |ui| {

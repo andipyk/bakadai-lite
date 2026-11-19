@@ -10,7 +10,7 @@ Kasir & stok barang ringan untuk toko. Jalan tanpa internet, tanpa batas.
 Bakadai Lite adalah aplikasi kasir dan stok barang untuk warung, toko kelontong, dan usaha kecil. Ringan (sekitar 4 MB), cepat di HP murah, dan tetap jalan tanpa internet.
 
 Kasir
-• Pilih barang dari katalog atau scan barcode (scanner USB/Bluetooth)
+• Pilih barang dari katalog atau scan barcode pakai kamera HP (atau scanner USB/Bluetooth)
 • Diskon, biaya tambahan, uang pas, dan kembalian otomatis
 • Catat piutang pembeli dan pembayaran sebagian
 • Cetak struk ke printer thermal Bluetooth atau Wi-Fi (58/80 mm)
@@ -50,7 +50,7 @@ Data Anda di HP Anda
 - Data dienkripsi saat transit: **Ya** (HTTPS, bila sinkron dipakai).
 - Pengguna bisa meminta data dihapus: data ada di HP; hapus aplikasi atau data aplikasi akan menghapus semuanya.
 
-Izin: `INTERNET` (sinkron opsional), `BLUETOOTH` (≤ Android 11) dan `BLUETOOTH_CONNECT` (printer struk).
+Izin: `INTERNET` (sinkron opsional), `BLUETOOTH` (≤ Android 11) dan `BLUETOOTH_CONNECT` (printer struk), `CAMERA` (scan barcode; gambar diproses di HP, tidak disimpan/dikirim, jadi tidak dihitung "dikumpulkan").
 
 ## Rating konten
 Aplikasi bisnis/utilitas: tanpa kekerasan, konten seksual, perjudian, atau interaksi antarpengguna. Target pengguna: 18+ (pemilik/staf toko).

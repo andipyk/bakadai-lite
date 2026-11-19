@@ -110,6 +110,9 @@ pub fn list_screen(app: &mut BakadaiApp, ui: &mut Ui) {
         if icon_button(ui, Icon::Filter, PRIMARY, PRIMARY_SOFT).on_hover_text("Urutkan dan Filter Barang").clicked() {
             app.products.show_filters = !app.products.show_filters;
         }
+        if icon_button(ui, Icon::Scan, PRIMARY, PRIMARY_SOFT).on_hover_text("Scan barcode pakai kamera").clicked() {
+            app.open_scanner();
+        }
         ui.add(
             egui::TextEdit::singleline(&mut app.products.search)
                 .hint_text("Cari nama / kode barang…")
@@ -117,6 +120,19 @@ pub fn list_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 .margin(egui::Margin::symmetric(10, 9)),
         );
     });
+    // Scan di daftar barang: barang yang ada dibuka, kode baru langsung jadi barang baru dengan kode terisi.
+    if let Some(code) = app.take_scan() {
+        if let Some(p) = app.db.product_by_code(&code) {
+            app.go(Screen::ProductDetail(p.id));
+        } else if can_edit {
+            app.products.open_new(&app.db);
+            app.products.form.code = code;
+            app.go(Screen::ProductEdit);
+            app.ok("Barang baru: kode diisi dari hasil scan");
+        } else {
+            app.err(format!("Kode Barang tidak tersedia: {code}"));
+        }
+    }
     if app.products.show_filters {
         card(ui, |ui| {
             let cats = app.db.categories("product");
@@ -361,13 +377,21 @@ pub fn edit_screen(app: &mut BakadaiApp, ui: &mut Ui) {
                 });
             });
         });
+        if let Some(code) = app.take_scan() {
+            app.products.form.code = code;
+        }
         let f = &mut app.products.form;
         card(ui, |ui| {
             field(ui, "Nama Barang (Wajib)", &mut f.name, "contoh: Kopi Bubuk 200g");
-            ui.label(RichText::new("Kode Barang (Wajib)").size(13.0).color(MUTED));
-            if input_with_button(ui, &mut f.code, "", "Acak", db::MAX_CODE_LEN) {
-                f.code = app.db.random_code();
-            }
+            ui.label(RichText::new("Kode Barang / Barcode (Wajib)").size(13.0).color(MUTED));
+            ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 52.0), Layout::right_to_left(Align::Center), |ui| {
+                if icon_button(ui, Icon::Scan, TEXT, BG).on_hover_text("Scan barcode pakai kamera").clicked() {
+                    app.want_scan = true;
+                }
+                if input_with_button(ui, &mut f.code, "", "Acak", db::MAX_CODE_LEN) {
+                    f.code = app.db.random_code();
+                }
+            });
             ui.label(RichText::new("Kategori").size(13.0).color(MUTED));
             let sel_name = f
                 .category_id

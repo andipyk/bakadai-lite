@@ -12,7 +12,7 @@ use egui::{Align, Color32, Layout, Margin, RichText, Ui, Vec2};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::sync::Arc;
 use widgets::*;
 
@@ -125,6 +125,14 @@ struct ShotState {
     done: Arc<AtomicBool>,
 }
 
+struct ScanUi {
+    cam: crate::scan::Camera,
+    tex: Option<egui::TextureHandle>,
+    /// Bingkai ke thread dekoder (kapasitas 1: bingkai dilewati selama dekoder masih sibuk).
+    tx: SyncSender<(Vec<u8>, u32, u32)>,
+    rx: Receiver<String>,
+}
+
 pub struct BakadaiApp {
     pub db: Db,
     pub data_dir: PathBuf,
@@ -149,6 +157,12 @@ pub struct BakadaiApp {
     /// Safe area (titik egui): tinggi bar status & bar navigasi Android.
     insets: (f32, f32),
     insets_for: Option<Vec2>,
+    /// Layar scan kamera yang sedang terbuka.
+    scan: Option<ScanUi>,
+    /// Kode hasil scan kamera, diambil layar yang membuka scanner lewat [`BakadaiApp::take_scan`].
+    scanned: Option<String>,
+    /// Permintaan buka scanner dari layar yang sedang meminjam state-nya (dibuka di awal bingkai berikutnya).
+    pub want_scan: bool,
     /// Waktu (detik egui) tombol kembali ditekan di layar terakhir; tekan lagi dalam 2 detik = keluar.
     exit_at: f64,
 }
@@ -231,6 +245,9 @@ impl BakadaiApp {
             insets: (0.0, 0.0),
             insets_for: None,
             exit_at: -10.0,
+            scan: None,
+            scanned: None,
+            want_scan: false,
         };
         if start == Screen::ProductEdit {
             app.products.open_new(&app.db);
@@ -252,6 +269,76 @@ impl BakadaiApp {
 
     pub fn money(&self, m: Money) -> String {
         db::fmt_money(m, &self.currency)
+    }
+
+    /// Buka kamera untuk scan barcode; hasilnya diambil layar yang sama lewat [`Self::take_scan`].
+    pub fn open_scanner(&mut self) {
+        match crate::scan::Camera::open() {
+            Ok(cam) => {
+                let (tx, frames) = std::sync::mpsc::sync_channel::<(Vec<u8>, u32, u32)>(1);
+                let (found, rx) = std::sync::mpsc::channel();
+                // Dekode di thread sendiri supaya pratinjau kamera tidak tersendat; berhenti saat scanner ditutup.
+                std::thread::spawn(move || {
+                    for (luma, w, h) in frames {
+                        if let Some(code) = crate::scan::decode(&luma, w, h) {
+                            if found.send(code).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                });
+                self.scan = Some(ScanUi { cam, tex: None, tx, rx });
+            }
+            Err(e) => self.err(e),
+        }
+    }
+    pub fn take_scan(&mut self) -> Option<String> {
+        self.scanned.take()
+    }
+
+    fn scan_ui(&mut self, ctx: &egui::Context) {
+        if std::mem::take(&mut self.want_scan) {
+            self.open_scanner();
+        }
+        let Some(s) = &mut self.scan else { return };
+        ctx.request_repaint();
+        if let Some(f) = s.cam.frame() {
+            let img = egui::ColorImage::from_gray([f.w, f.h], &f.luma);
+            match &mut s.tex {
+                Some(t) => t.set(img, egui::TextureOptions::LINEAR),
+                None => s.tex = Some(ctx.load_texture("scan", img, egui::TextureOptions::LINEAR)),
+            }
+            let _ = s.tx.try_send((f.luma, f.w as u32, f.h as u32));
+        }
+        let found = s.rx.try_recv().ok();
+        let mut close = false;
+        egui::Modal::new(egui::Id::unique("scan")).show(ctx, |ui| {
+            ui.set_width(300.0);
+            ui.label(RichText::new("Scan barcode").family(medium()).size(17.0));
+            ui.label(RichText::new("Arahkan kamera ke barcode barang").color(MUTED));
+            ui.add_space(6.0);
+            match &s.tex {
+                Some(t) => {
+                    let r = ui.add(egui::Image::new(t).fit_to_exact_size(Vec2::new(300.0, 400.0)).corner_radius(16)).rect;
+                    ui.painter().line_segment([egui::pos2(r.left() + 24.0, r.center().y), egui::pos2(r.right() - 24.0, r.center().y)], egui::Stroke::new(2.0, RED));
+                }
+                None => {
+                    ui.allocate_ui(Vec2::new(300.0, 400.0), |ui| ui.centered_and_justified(|ui| ui.spinner()));
+                }
+            }
+            ui.add_space(8.0);
+            if secondary_button(ui, "Batal").clicked() {
+                close = true;
+            }
+        });
+        if let Some(code) = found {
+            self.scanned = Some(code);
+            close = true;
+        }
+        if close {
+            self.scan = None; // menutup kamera; thread dekoder ikut berhenti
+            ctx.request_repaint();
+        }
     }
 
     pub fn ok(&mut self, msg: impl Into<String>) {
@@ -595,7 +682,9 @@ impl eframe::App for BakadaiApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::BrowserBack)) && self.confirm.is_none() {
             let now = ctx.input(|i| i.time);
-            if self.nav.len() > 1 {
+            if self.scan.is_some() {
+                self.scan = None;
+            } else if self.nav.len() > 1 {
                 self.back();
             } else if now - self.exit_at < 2.0 {
                 self.exit_at = -10.0;
@@ -637,6 +726,7 @@ impl eframe::App for BakadaiApp {
                 Screen::Fees => more::fees_screen(self, ui),
                 Screen::Sync => more::sync_screen(self, ui),
             });
+        self.scan_ui(&ctx);
         self.confirm_ui(&ctx);
         self.toast_ui(&ctx);
     }

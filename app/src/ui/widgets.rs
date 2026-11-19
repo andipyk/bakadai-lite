@@ -242,6 +242,7 @@ pub enum Icon {
     Check,
     Close,
     Dot,
+    Scan,
 }
 
 pub fn paint_icon(p: &egui::Painter, icon: Icon, c: egui::Pos2, s: f32, col: Color32) {
@@ -345,6 +346,16 @@ pub fn paint_icon(p: &egui::Painter, icon: Icon, c: egui::Pos2, s: f32, col: Col
         }
         Icon::Dot => {
             p.circle_filled(c, h * 0.5, col);
+        }
+        Icon::Scan => {
+            // Empat sudut bidik + garis tengah.
+            let (a, k) = (h * 0.85, h * 0.4);
+            for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let q = pos2(c.x + sx * a, c.y + sy * a);
+                p.line_segment([q, pos2(q.x - sx * k, q.y)], st);
+                p.line_segment([q, pos2(q.x, q.y - sy * k)], st);
+            }
+            p.line_segment([pos2(c.x - a * 0.7, c.y), pos2(c.x + a * 0.7, c.y)], st);
         }
     }
 }

@@ -98,21 +98,35 @@ fn parse_dt(s: &str) -> Option<i64> {
 /// Pencarian barang untuk ditambahkan ke formulir (maks 8 hasil, hasil diambil dari database).
 pub fn product_picker(app: &mut BakadaiApp, ui: &mut Ui, search: &mut String) -> Option<ProductRow> {
     let mut picked = None;
-    let resp = ui.add(
-        egui::TextEdit::singleline(search)
-            .hint_text("Cari / scan kode barang lalu Enter…")
-            .desired_width(f32::INFINITY)
-            .margin(egui::Margin::symmetric(10, 9)),
-    );
-    // Mode Barcode Scanner: scanner USB/Bluetooth mengetik kode + Enter.
-    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !search.trim().is_empty() {
-        if let Some(p) = app.db.product_by_code(search.trim()) {
+    let mut open_scan = false;
+    let resp = ui
+        .allocate_ui_with_layout(egui::Vec2::new(ui.available_width(), 44.0), Layout::right_to_left(Align::Center), |ui| {
+            open_scan = icon_button(ui, Icon::Scan, TEXT, BG).on_hover_text("Scan barcode pakai kamera").clicked();
+            ui.add(
+                egui::TextEdit::singleline(search)
+                    .hint_text("Cari / scan kode barang…")
+                    .desired_width(ui.available_width())
+                    .margin(egui::Margin::symmetric(10, 9)),
+            )
+        })
+        .inner;
+    if open_scan {
+        app.open_scanner();
+    }
+    // Scanner USB/Bluetooth mengetik kode + Enter; scan kamera mengisi kode langsung.
+    let typed = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !search.trim().is_empty();
+    let scanned = app.take_scan();
+    if typed || scanned.is_some() {
+        let code = scanned.unwrap_or_else(|| search.trim().to_string());
+        if let Some(p) = app.db.product_by_code(&code) {
             picked = app.db.list_products(&p.code, None, StockFilter::All, ProductSort::NameAsc).into_iter().find(|r| r.id == p.id);
             search.clear();
         } else {
-            app.err("Kode Barang tidak tersedia");
+            app.err(format!("Kode Barang tidak tersedia: {code}"));
         }
-        resp.request_focus();
+        if typed {
+            resp.request_focus();
+        }
     }
     if !search.trim().is_empty() && picked.is_none() {
         let rows = app.db.list_products(search, None, StockFilter::All, ProductSort::NameAsc);
