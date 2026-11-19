@@ -583,10 +583,14 @@ impl eframe::App for BakadaiApp {
         // Tombol kembali Android / Esc di komputer.
         let size = ctx.content_rect().size();
         if self.insets_for != Some(size) {
-            if let Some((t, b)) = crate::system_insets() {
-                let ppp = ctx.pixels_per_point();
-                self.insets = (t / ppp, b / ppp);
-                self.insets_for = Some(size);
+            // Di awal start Android bisa melapor 0 (jendela belum siap): jangan disimpan, coba lagi sebentar lagi.
+            match crate::system_insets() {
+                Some((t, b)) if t > 0.0 || cfg!(not(target_os = "android")) => {
+                    let ppp = ctx.pixels_per_point();
+                    self.insets = (t / ppp, b / ppp);
+                    self.insets_for = Some(size);
+                }
+                _ => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::BrowserBack)) && self.confirm.is_none() {

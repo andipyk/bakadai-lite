@@ -1,4 +1,10 @@
-# Bakadai Lite
+<p align="center">
+<img src="design/play/icon-512.png" width="120" alt="Logo Bakadai Lite">
+</p>
+
+<h1 align="center">Bakadai Lite</h1>
+
+<p align="center"><a href="https://github.com/andipyk/bakadai-lite/releases/latest"><b>Unduh APK terbaru</b></a></p>
 
 Aplikasi **stok barang & kasir** yang ringan untuk HP Android, dibuat dengan Rust.
 Jalan penuh **tanpa internet** (data di HP), lalu bisa **sinkron ke REST API milik Anda** saat online.
@@ -40,7 +46,7 @@ Staff, barang, riwayat, dan biaya tambahan **tanpa batas**.
 ## 2. Cara pakai (untuk pemilik toko)
 
 ### Pasang di HP
-1. Kirim `BakadaiLite.apk` ke HP (WhatsApp ke diri sendiri, Google Drive, atau kabel USB).
+1. Unduh `BakadaiLite.apk` dari [Releases](https://github.com/andipyk/bakadai-lite/releases/latest) langsung di HP, atau kirim file-nya ke HP (WhatsApp ke diri sendiri, Google Drive, atau kabel USB).
 2. Buka file-nya. Bila diminta, izinkan **"Instal aplikasi tidak dikenal"** untuk aplikasi tersebut.
 3. Buka **Bakadai Lite**. Saat pertama dibuka sudah ada **data contoh** (10 barang, beberapa transaksi) supaya mudah dicoba.
 4. Mata uang awal Rupiah (bisa diganti di Pengaturan). Tombol kembali Android menutup layar; di layar terakhir tekan dua kali untuk keluar.

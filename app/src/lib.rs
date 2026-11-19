@@ -105,7 +105,11 @@ mod android_ui {
         let raw = ctx.context() as jni::sys::jobject;
         vm.attach_current_thread(|env| {
             let activity = unsafe { env.as_cast_raw::<JObject>(&raw)? };
-            f(env, &activity)
+            let r = f(env, &activity);
+            if r.is_err() {
+                let _ = env.exception_clear(); // jangan biarkan exception Java menggantung ke panggilan JNI berikutnya
+            }
+            r
         })
         .map_err(|e| eprintln!("bakadai-lite: JNI gagal: {e:?}"))
         .ok()
@@ -127,20 +131,68 @@ mod android_ui {
         }
     }
 
+    /// Tinggi bar status & navigasi (px fisik). Utama: WindowInsets dari jendela; cadangan: ukuran bawaan
+    /// sistem `status_bar_height`/`navigation_bar_height` (selalu ada, juga sebelum jendela siap).
     pub fn insets() -> Option<(f32, f32)> {
         with_activity(|env, activity| {
-            let (_, decor) = decor(env, activity)?;
-            let ins = env
-                .call_method(&decor, jni_str!("getRootWindowInsets"), jni_sig!("()Landroid/view/WindowInsets;"), &[])?
-                .l()?;
-            if ins.is_null() {
-                return Ok(None); // view belum menempel ke jendela; coba lagi frame berikutnya
+            let from_window = window_insets(env, activity).unwrap_or_else(|_| {
+                let _ = env.exception_clear();
+                None
+            });
+            match from_window {
+                Some((t, b)) if t > 0 => Ok(Some((t as f32, b as f32))),
+                _ => {
+                    let t = system_dimen(env, activity, "status_bar_height")?;
+                    let b = system_dimen(env, activity, "navigation_bar_height")?;
+                    Ok(Some((t as f32, b as f32)))
+                }
             }
-            let top = env.call_method(&ins, jni_str!("getSystemWindowInsetTop"), jni_sig!("()I"), &[])?.i()?;
-            let bottom = env.call_method(&ins, jni_str!("getSystemWindowInsetBottom"), jni_sig!("()I"), &[])?.i()?;
-            Ok(Some((top as f32, bottom as f32)))
         })
         .flatten()
+    }
+
+    fn window_insets(env: &mut Env, activity: &JObject) -> jni::errors::Result<Option<(i32, i32)>> {
+        let (_, decor) = decor(env, activity)?;
+        let ins = env
+            .call_method(&decor, jni_str!("getRootWindowInsets"), jni_sig!("()Landroid/view/WindowInsets;"), &[])?
+            .l()?;
+        if ins.is_null() {
+            return Ok(None); // view belum menempel ke jendela
+        }
+        let sdk = env.get_static_field(jni_str!("android/os/Build$VERSION"), jni_str!("SDK_INT"), jni_sig!("I"))?.i()?;
+        if sdk >= 30 {
+            let types = env
+                .call_static_method(jni_str!("android/view/WindowInsets$Type"), jni_str!("systemBars"), jni_sig!("()I"), &[])?
+                .i()?;
+            let i = env
+                .call_method(&ins, jni_str!("getInsets"), jni_sig!("(I)Landroid/graphics/Insets;"), &[JValue::Int(types)])?
+                .l()?;
+            let top = env.get_field(&i, jni_str!("top"), jni_sig!("I"))?.i()?;
+            let bottom = env.get_field(&i, jni_str!("bottom"), jni_sig!("I"))?.i()?;
+            return Ok(Some((top, bottom)));
+        }
+        let top = env.call_method(&ins, jni_str!("getSystemWindowInsetTop"), jni_sig!("()I"), &[])?.i()?;
+        let bottom = env.call_method(&ins, jni_str!("getSystemWindowInsetBottom"), jni_sig!("()I"), &[])?.i()?;
+        Ok(Some((top, bottom)))
+    }
+
+    fn system_dimen(env: &mut Env, activity: &JObject, name: &str) -> jni::errors::Result<i32> {
+        let res = env
+            .call_method(activity, jni_str!("getResources"), jni_sig!("()Landroid/content/res/Resources;"), &[])?
+            .l()?;
+        let (n, t, p) = (env.new_string(name)?, env.new_string("dimen")?, env.new_string("android")?);
+        let id = env
+            .call_method(
+                &res,
+                jni_str!("getIdentifier"),
+                jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"),
+                &[JValue::Object(&n), JValue::Object(&t), JValue::Object(&p)],
+            )?
+            .i()?;
+        if id == 0 {
+            return Ok(0);
+        }
+        env.call_method(&res, jni_str!("getDimensionPixelSize"), jni_sig!("(I)I"), &[JValue::Int(id)])?.i()
     }
 
     pub fn move_task_to_back() {
