@@ -11,7 +11,18 @@ pub struct Frame {
     pub luma: Vec<u8>,
 }
 
-/// Baca barcode di gambar abu-abu. Format barang ritel (EAN/UPC/Code 128/39) + QR. ITF dan Codabar sengaja
+/// Bagian tengah bingkai (40% tinggi) yang dibaca dekoder; sama dengan kotak bidik di layar.
+pub const BAND_TOP: f32 = 0.3;
+pub const BAND_H: f32 = 0.4;
+
+/// Potong kotak bidik dari bingkai: (abu-abu, lebar, tinggi).
+pub fn band(f: &Frame) -> (Vec<u8>, u32, u32) {
+    let top = (f.h as f32 * BAND_TOP) as usize;
+    let h = (f.h as f32 * BAND_H) as usize;
+    (f.luma[top * f.w..(top + h) * f.w].to_vec(), f.w as u32, h as u32)
+}
+
+/// Baca barcode di gambar abu-abu. Format barang ritel (EAN-13/Code 128/39) + QR. ITF dan Codabar sengaja
 /// tidak dipakai: keduanya sering "membaca" kode palsu dari pola acak di depan kamera.
 pub fn decode(luma: &[u8], w: u32, h: u32) -> Option<String> {
     // Dekoder tidak boleh membuat aplikasi tertutup bila gagal di gambar yang aneh.
@@ -20,10 +31,9 @@ pub fn decode(luma: &[u8], w: u32, h: u32) -> Option<String> {
 
 fn decode_inner(luma: &[u8], w: u32, h: u32) -> Option<String> {
     let formats: HashSet<BarcodeFormat> = [
+        // EAN-8 dan UPC-E sengaja tidak dipakai: keduanya bisa "cocok" di separuh barcode EAN-13 sehingga hasilnya
+        // hanya sebagian angka. UPC-A dibaca oleh EAN-13 sebagai 13 digit (awalan 0), sama seperti kode di kemasan.
         BarcodeFormat::EAN_13,
-        BarcodeFormat::EAN_8,
-        BarcodeFormat::UPC_A,
-        BarcodeFormat::UPC_E,
         BarcodeFormat::CODE_128,
         BarcodeFormat::CODE_39,
         BarcodeFormat::QR_CODE,
@@ -105,8 +115,9 @@ mod android {
     #[link(name = "camera2ndk")]
     extern "C" {}
 
-    const W: i32 = 640;
-    const H: i32 = 480;
+    // 1280×720 (didukung hampir semua HP): garis barcode lebih tajam daripada 640×480.
+    const W: i32 = 1280;
+    const H: i32 = 720;
     const TAG_LENS_FACING: u32 = 524293;
     const TAG_SENSOR_ORIENTATION: u32 = 917518;
     const TAG_AF_MODE: u32 = 65543;
@@ -380,6 +391,14 @@ mod android {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn band_is_middle_rows() {
+        let f = Frame { w: 2, h: 10, luma: (0..20).collect() };
+        let (l, w, h) = band(&f);
+        assert_eq!((w, h), (2, 4));
+        assert_eq!(l, vec![6, 7, 8, 9, 10, 11, 12, 13]); // baris 3..7
+    }
 
     #[test]
     fn rotate_quarter_turn() {

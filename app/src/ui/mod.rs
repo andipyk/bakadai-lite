@@ -333,7 +333,7 @@ impl BakadaiApp {
                 Some(t) => t.set(img, egui::TextureOptions::LINEAR),
                 None => s.tex = Some(ctx.load_texture("scan", img, egui::TextureOptions::LINEAR)),
             }
-            let _ = s.tx.try_send((f.luma, f.w as u32, f.h as u32));
+            let _ = s.tx.try_send(crate::scan::band(&f));
         }
         // Kode diterima bila dua bacaan berturut-turut sama.
         let mut found = None;
@@ -349,15 +349,24 @@ impl BakadaiApp {
         egui::Modal::new(egui::Id::unique("scan")).show(ctx, |ui| {
             ui.set_width(300.0);
             ui.label(RichText::new("Scan barcode").family(medium()).size(17.0));
-            ui.label(RichText::new("Arahkan kamera ke barcode barang").color(MUTED));
+            ui.label(RichText::new("Masukkan seluruh barcode ke dalam kotak, jarak ±15 cm").color(MUTED));
             ui.add_space(6.0);
             match &s.tex {
                 Some(t) => {
-                    let r = ui.add(egui::Image::new(t).fit_to_exact_size(Vec2::new(300.0, 400.0)).corner_radius(16)).rect;
-                    ui.painter().line_segment([egui::pos2(r.left() + 24.0, r.center().y), egui::pos2(r.right() - 24.0, r.center().y)], egui::Stroke::new(2.0, RED));
+                    // Tampilkan bagian tengah berbentuk persegi, lalu kotak bidik = area yang benar-benar dibaca.
+                    let [tw, th] = t.size();
+                    let side = (tw.min(th) as f32) / th as f32;
+                    let v0 = (1.0 - side) / 2.0;
+                    let uv = egui::Rect::from_min_max(egui::pos2(0.0, v0), egui::pos2(1.0, v0 + side));
+                    let r = ui.add(egui::Image::new(t).uv(uv).fit_to_exact_size(Vec2::splat(300.0)).corner_radius(16)).rect;
+                    let y0 = r.top() + (crate::scan::BAND_TOP - v0) / side * r.height();
+                    let y1 = y0 + crate::scan::BAND_H / side * r.height();
+                    let aim = egui::Rect::from_min_max(egui::pos2(r.left() + 8.0, y0), egui::pos2(r.right() - 8.0, y1));
+                    ui.painter().rect_stroke(aim, 12, egui::Stroke::new(3.0, ACCENT), egui::StrokeKind::Middle);
+                    ui.painter().line_segment([egui::pos2(aim.left() + 16.0, aim.center().y), egui::pos2(aim.right() - 16.0, aim.center().y)], egui::Stroke::new(2.0, RED));
                 }
                 None => {
-                    ui.allocate_ui(Vec2::new(300.0, 400.0), |ui| ui.centered_and_justified(|ui| ui.spinner()));
+                    ui.allocate_ui(Vec2::splat(300.0), |ui| ui.centered_and_justified(|ui| ui.spinner()));
                 }
             }
             ui.add_space(8.0);
